@@ -7,10 +7,13 @@ echo.
 
 cd /d "%~dp0"
 
-echo [1/2] Verifying Python dependencies...
-python -m pip install -r requirements.txt --quiet
+set "PY_EXE=python"
+if exist ".venv\Scripts\python.exe" (
+    set "PY_EXE=.venv\Scripts\python.exe"
+) else if exist "venv\Scripts\python.exe" (
+    set "PY_EXE=venv\Scripts\python.exe"
+)
 
-echo.
-echo [2/2] Starting AI Vision Pipeline & FastAPI Server...
-python drowsiness_detector.py
+echo Starting AI Vision Pipeline & FastAPI Server using %PY_EXE%...
+"%PY_EXE%" drowsiness_detector.py
 pause
