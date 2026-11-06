@@ -1,1096 +1,1494 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Autonomous Vehicle DMS & Hazard HUD</title>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-    rel="stylesheet">
-
-  <style>
-    :root {
-      --bg-base: #030712;
-      --glass-surface-1: rgba(15, 23, 42, 0.55);
-      --glass-surface-2: rgba(30, 41, 59, 0.45);
-      --glass-surface-hover: rgba(51, 65, 85, 0.45);
-      --glass-inset: rgba(11, 17, 32, 0.7);
-
-      --glass-border: rgba(255, 255, 255, 0.10);
-      --glass-border-light: rgba(255, 255, 255, 0.16);
-      --glass-highlight: rgba(255, 255, 255, 0.08);
-
-      --brand-cyan: #38bdf8;
-      --brand-cyan-glow: rgba(56, 189, 248, 0.35);
-      --brand-violet: #a855f7;
-      --brand-violet-glow: rgba(168, 85, 247, 0.25);
-
-      --state-safe: #10b981;
-      --state-safe-bg: rgba(16, 185, 129, 0.12);
-      --state-safe-glow: rgba(16, 185, 129, 0.3);
-
-      --state-warn: #f59e0b;
-      --state-warn-bg: rgba(245, 158, 11, 0.14);
-      --state-warn-glow: rgba(245, 158, 11, 0.3);
-
-      --state-danger: #f43f5e;
-      --state-danger-bg: rgba(244, 63, 94, 0.16);
-      --state-danger-glow: rgba(244, 63, 94, 0.35);
-
-      --text-high: #f8fafc;
-      --text-mid: #94a3b8;
-      --text-low: #64748b;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background-color: var(--bg-base);
-      background-image:
-        radial-gradient(circle at 12% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
-        radial-gradient(circle at 88% 25%, rgba(168, 85, 247, 0.07) 0%, transparent 42%),
-        radial-gradient(circle at 50% 90%, rgba(16, 185, 129, 0.05) 0%, transparent 50%),
-        linear-gradient(180deg, #050b18 0%, #030712 100%);
-      background-attachment: fixed;
-      color: var(--text-high);
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 24px 20px;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-    }
-
-    .app-shell {
-      width: 100%;
-      max-width: 1440px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    /* =========================================================
-       GLASS CORE PRIMITIVES
-       ========================================================= */
-    .liquid-panel {
-      position: relative;
-      background: var(--glass-surface-1);
-      backdrop-filter: blur(24px) saturate(160%);
-      -webkit-backdrop-filter: blur(24px) saturate(160%);
-      border: 1px solid var(--glass-border);
-      border-radius: 20px;
-      box-shadow:
-        0 20px 40px -15px rgba(0, 0, 0, 0.6),
-        inset 0 1px 0 var(--glass-border-light),
-        inset 0 0 16px rgba(255, 255, 255, 0.02);
-      transition: border-color 0.25s ease, box-shadow 0.25s ease;
-      overflow: hidden;
-    }
-
-    .liquid-panel::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 15%;
-      right: 15%;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
-      pointer-events: none;
-    }
-
-    /* =========================================================
-       TOP HEADER
-       ========================================================= */
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 24px;
-    }
-
-    .brand-meta {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .brand-icon-wrap {
-      position: relative;
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.15));
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-
-    .live-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--state-safe);
-      box-shadow: 0 0 14px var(--state-safe-glow);
-      transition: background 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .platform-title-group {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .platform-title {
-      font-size: 1.05rem;
-      font-weight: 700;
-      letter-spacing: -0.015em;
-      color: var(--text-high);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .platform-tag {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.68rem;
-      color: var(--brand-cyan);
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      padding: 3px 8px;
-      border-radius: 6px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 18px;
-      border-radius: 12px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      background: var(--state-safe-bg);
-      color: var(--state-safe);
-      border: 1px solid rgba(16, 185, 129, 0.28);
-      box-shadow: 0 4px 16px var(--state-safe-glow), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transition: all 0.3s ease;
-    }
-
-    .status-badge.critical {
-      background: var(--state-danger-bg);
-      color: var(--state-danger);
-      border-color: rgba(244, 63, 94, 0.45);
-      box-shadow: 0 0 24px var(--state-danger-glow), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-      animation: alertPulse 1.3s infinite ease-in-out;
-    }
-
-    .status-badge.warning {
-      background: var(--state-warn-bg);
-      color: var(--state-warn);
-      border-color: rgba(245, 158, 11, 0.4);
-      box-shadow: 0 0 18px var(--state-warn-glow);
-    }
-
-    @keyframes alertPulse {
-
-      0%,
-      100% {
-        opacity: 1;
-        transform: scale(1);
-      }
-
-      50% {
-        opacity: 0.75;
-        transform: scale(1.02);
-      }
-    }
-
-    /* =========================================================
-       COCKPIT MAIN GRID
-       ========================================================= */
-    .cockpit-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.85fr) minmax(360px, 1.15fr);
-      gap: 20px;
-      align-items: stretch;
-    }
-
-    @media (max-width: 1100px) {
-      .cockpit-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    /* =========================================================
-       DUAL CAMERA SECTION
-       ========================================================= */
-    .camera-command-deck {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .deck-subhead {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 4px;
-    }
-
-    .deck-title {
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-mid);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .deck-title::before {
-      content: '';
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--brand-cyan);
-      box-shadow: 0 0 8px var(--brand-cyan);
-    }
-
-    .dual-camera-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-
-    @media (max-width: 760px) {
-      .dual-camera-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .camera-card {
-      background: var(--glass-surface-1);
-      backdrop-filter: blur(24px) saturate(160%);
-      border: 1px solid var(--glass-border);
-      border-radius: 18px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 var(--glass-border-light);
-      transition: transform 0.2s ease, border-color 0.25s ease;
-    }
-
-    .camera-card:hover {
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    .camera-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 16px;
-      background: rgba(15, 23, 42, 0.6);
-      border-bottom: 1px solid var(--glass-border);
-      z-index: 2;
-    }
-
-    .camera-title-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      color: var(--text-high);
-    }
-
-    .hud-pill {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.68rem;
-      font-weight: 600;
-      color: var(--text-mid);
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--glass-border);
-      padding: 3px 8px;
-      border-radius: 6px;
-    }
-
-    /* Sub-Viewport Windows for Dual Display */
-    .viewport-window {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 4 / 3;
-      background: #000;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .viewport-window::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.7);
-      pointer-events: none;
-    }
-
-    .cam-feed-crop {
-      position: absolute;
-      width: 200%;
-      height: 100%;
-      max-width: none;
-      object-fit: cover;
-      display: block;
-    }
-
-    /* Driver Cam Focus (Left Half of Composite Feed) */
-    .driver-view .cam-feed-crop {
-      left: 0;
-    }
-
-    /* Road Cam Focus (Right Half of Composite Feed) */
-    .road-view .cam-feed-crop {
-      left: -100%;
-    }
-
-    .hud-overlay-tag {
-      position: absolute;
-      bottom: 12px;
-      left: 12px;
-      z-index: 3;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(11, 17, 32, 0.75);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.65rem;
-      font-weight: 600;
-      color: var(--text-high);
-    }
-
-    .hud-status-led {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--brand-cyan);
-      box-shadow: 0 0 8px var(--brand-cyan);
-    }
-
-    /* Hidden Fallback Anchor */
-    .legacy-stream-anchor {
-      display: none;
-    }
-
-    /* =========================================================
-       TELEMETRY DECK (RIGHT COLUMN)
-       ========================================================= */
-    .telemetry-deck {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .section-card {
-      background: var(--glass-surface-1);
-      backdrop-filter: blur(24px) saturate(160%);
-      border: 1px solid var(--glass-border);
-      border-radius: 20px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      box-shadow:
-        0 20px 40px -15px rgba(0, 0, 0, 0.6),
-        inset 0 1px 0 var(--glass-border-light);
-    }
-
-    /* FATIGUE INDEX GAUGE */
-    .gauge-container {
-      background: var(--glass-surface-2);
-      border: 1px solid var(--glass-border);
-      border-radius: 14px;
-      padding: 16px 18px;
-      box-shadow: inset 0 1px 0 var(--glass-border);
-    }
-
-    .gauge-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 10px;
-    }
-
-    .gauge-title {
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-mid);
-    }
-
-    .gauge-val {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: var(--text-high);
-      text-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
-    }
-
-    .gauge-track {
-      width: 100%;
-      height: 8px;
-      background: rgba(255, 255, 255, 0.06);
-      border-radius: 999px;
-      overflow: hidden;
-      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
-    }
-
-    .gauge-fill {
-      height: 100%;
-      width: 5%;
-      border-radius: 999px;
-      background: linear-gradient(90deg, #059669, var(--state-safe));
-      box-shadow: 0 0 12px var(--state-safe-glow);
-      transition: width 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    /* TELEMETRY TILES MATRIX */
-    .telemetry-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .grid-card {
-      background: var(--glass-surface-2);
-      border: 1px solid var(--glass-border);
-      border-radius: 14px;
-      padding: 14px 16px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      min-height: 76px;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      transition: all 0.2s ease;
-    }
-
-    .grid-card:hover {
-      background: var(--glass-surface-hover);
-      border-color: var(--glass-border-light);
-      transform: translateY(-1px);
-    }
-
-    .card-label {
-      font-size: 0.67rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      color: var(--text-low);
-      text-transform: uppercase;
-    }
-
-    .metric-value {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--text-high);
-      margin-top: 4px;
-      letter-spacing: -0.02em;
-    }
-
-    .metric-value.warn {
-      color: var(--state-warn);
-      text-shadow: 0 0 12px var(--state-warn-glow);
-    }
-
-    .metric-value.crit {
-      color: var(--state-danger);
-      text-shadow: 0 0 14px var(--state-danger-glow);
-    }
-
-    .metric-value.safe {
-      color: var(--state-safe);
-      text-shadow: 0 0 12px var(--state-safe-glow);
-    }
-
-    /* SYSTEM CONTROLS */
-    .controls-deck {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .system-btn {
-      position: relative;
-      padding: 14px 18px;
-      border-radius: 14px;
-      font-size: 0.82rem;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      outline: none;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      transition: all 0.2s ease;
-      box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.5);
-    }
-
-    .btn-halt {
-      background: linear-gradient(135deg, rgba(244, 63, 94, 0.18), rgba(159, 18, 57, 0.3));
-      color: #fda4af;
-      border: 1px solid rgba(244, 63, 94, 0.35);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 20px -4px rgba(244, 63, 94, 0.25);
-    }
-
-    .btn-halt:hover {
-      background: linear-gradient(135deg, rgba(244, 63, 94, 0.28), rgba(159, 18, 57, 0.45));
-      border-color: var(--state-danger);
-      color: #fff;
-      transform: translateY(-2px);
-      box-shadow: 0 12px 28px -4px var(--state-danger-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-    }
-
-    .btn-halt:active {
-      transform: translateY(0);
-    }
-
-    .btn-arm {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 95, 70, 0.3));
-      color: #6ee7b7;
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 20px -4px rgba(16, 185, 129, 0.2);
-    }
-
-    .btn-arm:hover {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(6, 95, 70, 0.45));
-      border-color: var(--state-safe);
-      color: #fff;
-      transform: translateY(-2px);
-      box-shadow: 0 12px 28px -4px var(--state-safe-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-    }
-
-    .btn-arm:active {
-      transform: translateY(0);
-    }
-
-    /* TELEMETRY JOURNAL CONSOLE */
-    .log-terminal {
-      background: var(--glass-inset);
-      border: 1px solid var(--glass-border);
-      border-radius: 14px;
-      padding: 14px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
-    }
-
-    .terminal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.68rem;
-      font-weight: 700;
-      color: var(--text-low);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .log-stream {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      height: 135px;
-      overflow-y: auto;
-      padding-right: 4px;
-    }
-
-    .log-stream::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    .log-stream::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 4px;
-    }
-
-    .log-entry {
-      display: flex;
-      gap: 8px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      line-height: 1.45;
-    }
-
-    .log-ts {
-      color: var(--text-low);
-      flex-shrink: 0;
-      opacity: 0.8;
-    }
-
-    .log-text.success {
-      color: var(--state-safe);
-    }
-
-    .log-text.warning {
-      color: var(--state-warn);
-    }
-
-    .log-text.danger {
-      color: var(--state-danger);
-      font-weight: 600;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomous Vehicle DMS & Hazard HUD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap"
+rel="stylesheet">
+<style>
+/* =========================================================
+GLASS CORE PRIMITIVES & RICH DARK BLUE TOKENS
+========================================================= */
+:root {
+--bg-base: #020612;
+--bg-radial-1: rgba(14, 116, 144, 0.05);
+--bg-radial-2: rgba(30, 58, 138, 0.05);
+--bg-radial-3: rgba(2, 132, 199, 0.04);
+--accent-cyan: #38bdf8;
+--accent-cyan-glow: rgba(56, 189, 248, 0.35);
+--accent-blue: #0284c7;
+/* Rich, deep, solid dark blue surfaces matching reference image */
+--glass-surface-1: #061126;
+--glass-surface-2: #081736;
+--glass-surface-hover: #0e2554;
+--glass-inset: #030814;
+/* Crisp dark blue borders with subtle cyan sheen */
+--glass-border: rgba(56, 189, 248, 0.26);
+--glass-border-light: rgba(56, 189, 248, 0.50);
+--glass-highlight: rgba(56, 189, 248, 0.08);
+--brand-cyan: #38bdf8;
+--brand-cyan-glow: rgba(56, 189, 248, 0.35);
+--brand-violet: #818cf8;
+--brand-violet-glow: rgba(129, 140, 248, 0.30);
+--state-safe: #10b981;
+--state-safe-bg: rgba(16, 185, 129, 0.14);
+--state-safe-glow: rgba(16, 185, 129, 0.35);
+--state-warn: #fbbf24;
+--state-warn-bg: rgba(251, 191, 36, 0.14);
+--state-warn-glow: rgba(251, 191, 36, 0.35);
+--state-danger: #f87171;
+--state-danger-bg: rgba(248, 113, 113, 0.16);
+--state-danger-glow: rgba(248, 113, 113, 0.40);
+/* Crisp, high-contrast, non-glowing text tokens */
+--text-high: #ffffff;
+--text-sub: #f1f5f9;
+--text-mid: #94a3b8;
+--text-low: #64748b;
+--card-radius: 12px;
+}
+* {
+box-sizing: border-box;
+margin: 0;
+padding: 0;
+}
+html, body {
+height: 100vh;
+max-height: 100vh;
+overflow: hidden; /* Fully non-scrollable fullscreen cockpit */
+}
+body {
+background-color: var(--bg-base);
+background-image:
+radial-gradient(circle at 12% 15%, var(--bg-radial-1) 0%, transparent 45%),
+radial-gradient(circle at 88% 25%, var(--bg-radial-2) 0%, transparent 45%),
+radial-gradient(circle at 50% 90%, var(--bg-radial-3) 0%, transparent 50%),
+linear-gradient(180deg, #040c1c 0%, #01040d 100%);
+background-attachment: fixed;
+color: var(--text-high);
+font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+display: flex;
+flex-direction: column;
+align-items: center;
+padding: 12px 20px 14px;
+-webkit-font-smoothing: antialiased;
+position: relative;
+}
+/* Subtle Technical Grid Overlay */
+body::before {
+content: '';
+position: fixed;
+inset: 0;
+background-image:
+linear-gradient(rgba(56, 189, 248, 0.02) 1px, transparent 1px),
+linear-gradient(90deg, rgba(56, 189, 248, 0.02) 1px, transparent 1px);
+background-size: 36px 36px;
+background-position: -1px -1px;
+pointer-events: none;
+z-index: 0;
+}
+.app-shell {
+position: relative;
+z-index: 1;
+width: 100%;
+max-width: 1600px;
+height: 100%;
+max-height: 100%;
+display: flex;
+flex-direction: column;
+gap: 12px;
+min-height: 0;
+}
+/* =========================================================
+GLASS CORE PRIMITIVES
+========================================================= */
+.liquid-panel {
+position: relative;
+background: var(--glass-surface-1);
+backdrop-filter: blur(24px) saturate(180%);
+-webkit-backdrop-filter: blur(24px) saturate(180%);
+border: 1px solid var(--glass-border);
+border-radius: var(--card-radius);
+box-shadow:
+0 14px 32px -8px rgba(0, 0, 0, 0.85),
+inset 0 1px 0 rgba(255, 255, 255, 0.10),
+inset 0 0 16px rgba(56, 189, 248, 0.02);
+transition: border-color 0.25s ease, box-shadow 0.25s ease;
+overflow: hidden;
+}
+.liquid-panel::before {
+content: '';
+position: absolute;
+top: 0;
+left: 10%;
+right: 10%;
+height: 1px;
+background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.35), transparent);
+pointer-events: none;
+}
+/* HUD Corner Crosshair Brackets */
+.hud-bracket {
+position: relative;
+}
+.hud-bracket::before,
+.hud-bracket::after {
+content: '';
+position: absolute;
+width: 10px;
+height: 10px;
+pointer-events: none;
+z-index: 4;
+opacity: 0.8;
+transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.hud-bracket::before {
+top: 8px;
+left: 8px;
+border-top: 2px solid var(--accent-cyan);
+border-left: 2px solid var(--accent-cyan);
+}
+.hud-bracket::after {
+bottom: 8px;
+right: 8px;
+border-bottom: 2px solid var(--accent-cyan);
+border-right: 2px solid var(--accent-cyan);
+}
+.hud-bracket:hover::before,
+.hud-bracket:hover::after {
+opacity: 1;
+transform: scale(1.05);
+}
+/* =========================================================
+TOP HEADER
+========================================================= */
+.topbar {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 12px 22px;
+border-radius: 12px;
+flex-shrink: 0;
+box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.6);
+}
+.brand-meta {
+display: flex;
+align-items: center;
+gap: 14px;
+}
+.brand-icon-wrap {
+position: relative;
+width: 38px;
+height: 38px;
+border-radius: 10px;
+background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(14, 116, 144, 0.2));
+border: 1px solid rgba(56, 189, 248, 0.3);
+display: flex;
+align-items: center;
+justify-content: center;
+box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+flex-shrink: 0;
+}
+.pulse-ring {
+position: absolute;
+inset: -3px;
+border-radius: 12px;
+border: 1px solid var(--state-safe);
+opacity: 0.35;
+animation: radarPulse 2.4s cubic-bezier(0.25, 0.8, 0.25, 1) infinite;
+pointer-events: none;
+}
+@keyframes radarPulse {
+0% {
+transform: scale(0.9);
+opacity: 0.8;
+}
+100% {
+transform: scale(1.35);
+opacity: 0;
+}
+}
+.live-dot {
+width: 10px;
+height: 10px;
+border-radius: 50%;
+background: var(--state-safe);
+box-shadow: 0 0 14px var(--state-safe-glow);
+transition: background 0.3s ease, box-shadow 0.3s ease;
+z-index: 2;
+}
+.platform-title {
+font-size: 1.08rem;
+font-weight: 800;
+letter-spacing: -0.01em;
+color: #ffffff; /* Crisp white title */
+text-shadow: none;
+display: flex;
+align-items: center;
+gap: 12px;
+line-height: 1;
+}
+.platform-tag {
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.66rem;
+color: var(--accent-cyan);
+background: rgba(56, 189, 248, 0.12);
+border: 1px solid rgba(56, 189, 248, 0.35);
+padding: 3px 9px;
+border-radius: 6px;
+font-weight: 700;
+letter-spacing: 0.08em;
+text-transform: uppercase;
+}
+.header-actions {
+display: flex;
+align-items: center;
+gap: 14px;
+}
+.header-stat-group {
+display: flex;
+align-items: center;
+gap: 8px;
+}
+.system-clock-badge {
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.74rem;
+font-weight: 600;
+color: #ffffff; /* Crisp white */
+background: #081736;
+border: 1px solid var(--glass-border);
+padding: 6px 12px;
+border-radius: 8px;
+display: flex;
+align-items: center;
+gap: 6px;
+}
+.system-clock-badge svg {
+color: var(--accent-cyan);
+}
+.status-badge {
+display: inline-flex;
+align-items: center;
+gap: 9px;
+padding: 7px 18px;
+border-radius: 8px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.78rem;
+font-weight: 700;
+letter-spacing: 0.05em;
+background: var(--state-safe-bg);
+color: #ffffff; /* Clean white text */
+border: 1px solid rgba(16, 185, 129, 0.4);
+box-shadow: 0 4px 14px var(--state-safe-glow), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+transition: all 0.3s ease;
+white-space: nowrap;
+text-shadow: none;
+}
+.status-badge.critical {
+background: var(--state-danger-bg);
+color: #ffffff;
+border-color: #f43f5e;
+box-shadow: 0 0 20px var(--state-danger-glow), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+text-shadow: none;
+animation: alertPulse 1.2s infinite ease-in-out;
+}
+.status-badge.warning {
+background: var(--state-warn-bg);
+color: #ffffff;
+border-color: #f59e0b;
+box-shadow: 0 0 16px var(--state-warn-glow);
+text-shadow: none;
+}
+@keyframes alertPulse {
+0%, 100% {
+opacity: 1;
+transform: scale(1);
+}
+50% {
+opacity: 0.75;
+transform: scale(1.02);
+}
+}
+/* =========================================================
+COCKPIT MAIN GRID (CALIBRATED ZERO-SCROLL ARCHITECTURE)
+========================================================= */
+.cockpit-grid {
+display: grid;
+grid-template-rows: minmax(0, 1.25fr) minmax(0, 1fr);
+gap: 12px;
+width: 100%;
+flex: 1;
+min-height: 0;
+}
+/* ROW 1: UPPER COCKPIT (DUAL CAMERAS + VITALS / CONTROLS) */
+.upper-deck-grid {
+display: grid;
+grid-template-columns: minmax(0, 1.85fr) minmax(340px, 1.15fr);
+gap: 12px;
+min-height: 0;
+height: 100%;
+}
+/* ROW 2: LOWER COCKPIT (TELEMETRY MATRIX ON LEFT, LIVE JOURNAL ON RIGHT) */
+.lower-deck-grid {
+display: grid;
+grid-template-columns: minmax(0, 1.85fr) minmax(340px, 1.15fr);
+gap: 12px;
+min-height: 0;
+height: 100%;
+}
+/* =========================================================
+DUAL CAMERA SECTION
+========================================================= */
+.camera-command-deck {
+display: flex;
+flex-direction: column;
+gap: 6px;
+height: 100%;
+min-height: 0;
+}
+.deck-subhead {
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 0 4px 4px 4px;
+flex-shrink: 0;
+}
+.deck-title {
+font-size: 0.74rem;
+font-weight: 700;
+letter-spacing: 0.08em;
+text-transform: uppercase;
+color: #ffffff; /* Clean white title */
+text-shadow: none;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+.deck-title::before {
+content: '';
+width: 6px;
+height: 6px;
+border-radius: 50%;
+background: var(--accent-cyan);
+box-shadow: 0 0 8px var(--accent-cyan);
+}
+.hud-meta-group {
+display: flex;
+align-items: center;
+gap: 6px;
+}
+.dual-camera-grid {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 12px;
+flex: 1;
+min-height: 0;
+height: 100%;
+}
+.camera-card {
+background: var(--glass-surface-1);
+backdrop-filter: blur(24px) saturate(180%);
+border: 1px solid var(--glass-border);
+border-radius: var(--card-radius);
+overflow: hidden;
+display: flex;
+flex-direction: column;
+box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+position: relative;
+height: 100%;
+min-height: 0;
+}
+.camera-card:hover {
+border-color: rgba(56, 189, 248, 0.45);
+box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.85), 0 0 16px rgba(56, 189, 248, 0.15);
+}
+.camera-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 9px 14px;
+background: #040c1f;
+border-bottom: 1px solid var(--glass-border);
+z-index: 2;
+flex-shrink: 0;
+}
+.camera-title-badge {
+display: flex;
+align-items: center;
+gap: 8px;
+font-size: 0.74rem;
+font-weight: 700;
+letter-spacing: 0.05em;
+color: #ffffff; /* Clean white */
+text-shadow: none;
+}
+.hud-pill {
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.65rem;
+font-weight: 600;
+color: #cbd5e1; /* Clean off-white */
+background: rgba(255, 255, 255, 0.05);
+border: 1px solid var(--glass-border);
+padding: 3px 8px;
+border-radius: 6px;
+display: inline-flex;
+align-items: center;
+gap: 5px;
+}
+/* Sub-Viewport Windows for Dual Display */
+.viewport-window {
+position: relative;
+width: 100%;
+flex: 1;
+min-height: 0;
+background: #020612;
+overflow: hidden;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.viewport-window::after {
+content: '';
+position: absolute;
+inset: 0;
+box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.85);
+pointer-events: none;
+z-index: 2;
+}
+/* Dynamic Laser Scanning Line Animation */
+.viewport-scanline {
+position: absolute;
+left: 0;
+right: 0;
+height: 2px;
+background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+box-shadow: 0 0 10px var(--accent-cyan);
+opacity: 0.75;
+z-index: 3;
+pointer-events: none;
+animation: scanAnim 3.8s linear infinite;
+}
+.road-view .viewport-scanline {
+background: linear-gradient(90deg, transparent, var(--brand-violet), transparent);
+box-shadow: 0 0 10px var(--brand-violet);
+animation-delay: 1.9s;
+}
+@keyframes scanAnim {
+0% {
+top: 0%;
+opacity: 0;
+}
+10% {
+opacity: 0.85;
+}
+90% {
+opacity: 0.85;
+}
+100% {
+top: 100%;
+opacity: 0;
+}
+}
+/* Target Reticle Crosshairs */
+.reticle-crosshair {
+position: absolute;
+width: 42px;
+height: 42px;
+border: 1px dashed rgba(56, 189, 248, 0.3);
+border-radius: 50%;
+pointer-events: none;
+z-index: 2;
+opacity: 0.75;
+}
+.reticle-crosshair::before,
+.reticle-crosshair::after {
+content: '';
+position: absolute;
+background: rgba(56, 189, 248, 0.45);
+}
+.reticle-crosshair::before {
+top: 50%;
+left: -8px;
+right: -8px;
+height: 1px;
+transform: translateY(-50%);
+}
+.reticle-crosshair::after {
+left: 50%;
+top: -8px;
+bottom: -8px;
+width: 1px;
+transform: translateX(-50%);
+}
+.cam-feed-crop {
+position: absolute;
+width: 200%;
+height: 100%;
+max-width: none;
+object-fit: cover;
+display: block;
+}
+/* Driver Cam Focus (Left Half of Composite Feed) */
+.driver-view .cam-feed-crop {
+left: 0;
+}
+/* Road Cam Focus (Right Half of Composite Feed) */
+.road-view .cam-feed-crop {
+left: -100%;
+}
+.hud-overlay-tag {
+position: absolute;
+bottom: 10px;
+left: 10px;
+z-index: 4;
+display: flex;
+align-items: center;
+gap: 7px;
+background: rgba(4, 10, 24, 0.92);
+backdrop-filter: blur(8px);
+border: 1px solid rgba(56, 189, 248, 0.3);
+border-radius: 6px;
+padding: 4px 10px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.64rem;
+font-weight: 600;
+color: #ffffff; /* Clean white text */
+text-shadow: none;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.hud-telemetry-tag-right {
+position: absolute;
+top: 10px;
+right: 10px;
+z-index: 4;
+display: flex;
+align-items: center;
+gap: 6px;
+background: rgba(4, 10, 24, 0.88);
+backdrop-filter: blur(8px);
+border: 1px solid rgba(56, 189, 248, 0.22);
+border-radius: 6px;
+padding: 3px 8px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.62rem;
+color: #cbd5e1;
+text-shadow: none;
+}
+.hud-status-led {
+width: 6px;
+height: 6px;
+border-radius: 50%;
+background: var(--accent-cyan);
+box-shadow: 0 0 8px var(--accent-cyan);
+}
+/* Hidden Fallback Anchor */
+.legacy-stream-anchor {
+display: none;
+}
+/* =========================================================
+TELEMETRY DECK & VITALS CARDS
+========================================================= */
+.cockpit-side-deck {
+display: flex;
+flex-direction: column;
+gap: 6px;
+height: 100%;
+min-height: 0;
+}
+.section-card {
+background: var(--glass-surface-1);
+backdrop-filter: blur(24px) saturate(180%);
+border: 1px solid var(--glass-border);
+border-radius: var(--card-radius);
+padding: 14px 16px;
+display: flex;
+flex-direction: column;
+justify-content: space-between;
+gap: 10px;
+height: 100%;
+min-height: 0;
+box-shadow: 0 14px 30px -8px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+position: relative;
+}
+/* FATIGUE INDEX GAUGE */
+.gauge-container {
+background: var(--glass-surface-2);
+border: 1px solid var(--glass-border);
+border-radius: 10px;
+padding: 12px 16px;
+box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.3);
+position: relative;
+}
+.gauge-top {
+display: flex;
+justify-content: space-between;
+align-items: baseline;
+margin-bottom: 8px;
+}
+.gauge-title-wrap {
+display: flex;
+flex-direction: column;
+gap: 2px;
+}
+.gauge-title {
+font-size: 0.72rem;
+font-weight: 700;
+letter-spacing: 0.08em;
+text-transform: uppercase;
+color: #cbd5e1; /* Clean off-white label */
+text-shadow: none;
+display: flex;
+align-items: center;
+gap: 7px;
+}
+.gauge-title svg {
+color: var(--accent-cyan);
+}
+.gauge-subtitle {
+font-size: 0.60rem;
+color: var(--text-low);
+font-family: 'JetBrains Mono', monospace;
+letter-spacing: 0.04em;
+}
+.gauge-val {
+font-family: 'JetBrains Mono', monospace;
+font-size: 1.45rem;
+font-weight: 800;
+color: #ffffff; /* Crisp pure white */
+text-shadow: none;
+letter-spacing: -0.02em;
+line-height: 1;
+}
+.gauge-track {
+position: relative;
+width: 100%;
+height: 8px;
+background: rgba(255, 255, 255, 0.06);
+border-radius: 999px;
+overflow: hidden;
+box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.gauge-fill {
+height: 100%;
+width: 5%;
+border-radius: 999px;
+background: linear-gradient(90deg, #059669, var(--state-safe));
+box-shadow: 0 0 12px var(--state-safe-glow);
+transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.35s ease, box-shadow 0.35s ease;
+}
+.gauge-scale-ticks {
+display: flex;
+justify-content: space-between;
+margin-top: 6px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.58rem;
+color: var(--text-low);
+}
+/* SYSTEM CONTROLS */
+.controls-deck {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 12px;
+}
+.system-btn {
+position: relative;
+padding: 11px 16px;
+border-radius: 10px;
+font-family: 'Plus Jakarta Sans', sans-serif;
+font-size: 0.80rem;
+font-weight: 700;
+letter-spacing: 0.03em;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 9px;
+outline: none;
+backdrop-filter: blur(16px);
+-webkit-backdrop-filter: blur(16px);
+transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+box-shadow: 0 6px 18px -4px rgba(0, 0, 0, 0.5);
+border: 1px solid transparent;
+user-select: none;
+text-shadow: none;
+}
+.btn-halt {
+background: linear-gradient(135deg, rgba(244, 63, 94, 0.18), rgba(159, 18, 57, 0.32));
+color: #ffffff; /* Clean white */
+border-color: rgba(244, 63, 94, 0.45);
+box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 6px 18px -4px rgba(244, 63, 94, 0.25);
+text-shadow: none;
+}
+.btn-halt:hover {
+background: linear-gradient(135deg, rgba(244, 63, 94, 0.32), rgba(159, 18, 57, 0.55));
+border-color: #f43f5e;
+color: #ffffff;
+transform: translateY(-2px);
+box-shadow: 0 10px 24px -4px rgba(244, 63, 94, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.btn-halt:active {
+transform: translateY(0);
+}
+.btn-arm {
+background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 95, 70, 0.32));
+color: #ffffff; /* Clean white */
+border-color: rgba(16, 185, 129, 0.45);
+box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 6px 18px -4px rgba(16, 185, 129, 0.2);
+text-shadow: none;
+}
+.btn-arm svg {
+color: #34d399;
+}
+.btn-arm:hover {
+background: linear-gradient(135deg, rgba(16, 185, 129, 0.30), rgba(6, 95, 70, 0.52));
+border-color: #10b981;
+color: #ffffff;
+transform: translateY(-2px);
+box-shadow: 0 10px 24px -4px rgba(16, 185, 129, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.btn-arm:active {
+transform: translateY(0);
+}
+/* QUICK SYSTEM DIAGNOSTICS STRIP */
+.system-vitals-strip {
+background: #040c1f;
+border: 1px solid var(--glass-border);
+border-radius: 8px;
+padding: 8px 12px;
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 10px;
+}
+.vitals-item {
+display: flex;
+flex-direction: column;
+gap: 2px;
+}
+.vitals-label {
+font-size: 0.58rem;
+font-weight: 700;
+color: var(--text-mid);
+text-transform: uppercase;
+letter-spacing: 0.05em;
+}
+.vitals-value {
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.74rem;
+font-weight: 600;
+color: #ffffff; /* Crisp white */
+text-shadow: none;
+}
+/* =========================================================
+LOWER COCKPIT ARCHITECTURE (BALANCED 2-PANEL LAYOUT)
+========================================================= */
+.telemetry-matrix-panel {
+display: flex;
+flex-direction: column;
+gap: 6px;
+height: 100%;
+min-height: 0;
+}
+.journal-panel {
+display: flex;
+flex-direction: column;
+gap: 6px;
+height: 100%;
+min-height: 0;
+}
+/* TELEMETRY TILES MATRIX (EXACT ORDER REQUESTED) */
+.telemetry-grid {
+display: grid;
+grid-template-columns: repeat(4, 1fr);
+grid-template-rows: 1fr 1fr;
+gap: 10px;
+flex: 1;
+min-height: 0;
+height: 100%;
+}
+/* Solid, rich dark blue cards under camera monitors */
+.grid-card {
+background: linear-gradient(180deg, #091a3c 0%, #050e24 100%);
+border: 1px solid rgba(56, 189, 248, 0.28);
+border-radius: 10px;
+padding: 11px 14px;
+display: flex;
+flex-direction: column;
+justify-content: space-between;
+min-height: 0;
+height: 100%;
+box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+transition: all 0.22s ease;
+position: relative;
+overflow: hidden;
+}
+.grid-card::after {
+content: '';
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 2px;
+background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.5), transparent);
+}
+.grid-card:hover {
+background: linear-gradient(180deg, #0e2759 0%, #081636 100%);
+border-color: rgba(56, 189, 248, 0.55);
+transform: translateY(-2px);
+box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.8), 0 0 16px rgba(56, 189, 248, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.card-header-row {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 6px;
+margin-bottom: 3px;
+}
+.card-label {
+font-size: 0.68rem;
+font-weight: 700;
+letter-spacing: 0.05em;
+color: var(--text-mid); /* Clean silver slate */
+text-transform: uppercase;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+text-shadow: none;
+}
+.card-icon {
+width: 17px;
+height: 17px;
+opacity: 0.85;
+color: var(--accent-cyan);
+flex-shrink: 0;
+}
+.metric-value-wrap {
+display: flex;
+align-items: baseline;
+justify-content: space-between;
+margin: 2px 0 3px 0;
+}
+.metric-value {
+font-family: 'JetBrains Mono', monospace;
+font-size: 1.25rem;
+font-weight: 800;
+color: #ffffff; /* Crisp white digits */
+letter-spacing: -0.01em;
+line-height: 1.15;
+text-shadow: none; /* No blurry glow */
+transition: color 0.25s ease;
+}
+.metric-value.warn {
+color: var(--state-warn);
+text-shadow: none;
+}
+.metric-value.crit {
+color: var(--state-danger);
+text-shadow: none;
+}
+.metric-value.safe {
+color: #ffffff; /* Clean white */
+text-shadow: none;
+}
+.card-subtext {
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.60rem;
+color: var(--text-low); /* Clean muted technical gray */
+letter-spacing: 0.04em;
+text-shadow: none;
+}
+/* TELEMETRY JOURNAL CONSOLE */
+.log-terminal {
+background: linear-gradient(180deg, #071530 0%, #030a17 100%);
+border: 1px solid rgba(56, 189, 248, 0.28);
+border-radius: 10px;
+padding: 12px 16px;
+display: flex;
+flex-direction: column;
+gap: 8px;
+box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.7), inset 0 2px 8px rgba(0, 0, 0, 0.7);
+height: 100%;
+min-height: 0;
+}
+.terminal-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding-bottom: 8px;
+border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.70rem;
+font-weight: 700;
+color: #ffffff; /* Crisp white */
+text-transform: uppercase;
+letter-spacing: 0.08em;
+text-shadow: none;
+flex-shrink: 0;
+}
+.live-stream-badge {
+display: inline-flex;
+align-items: center;
+gap: 5px;
+font-size: 0.62rem;
+color: #ffffff; /* Clean white */
+background: var(--state-safe-bg);
+border: 1px solid rgba(16, 185, 129, 0.3);
+padding: 2px 7px;
+border-radius: 4px;
+text-shadow: none;
+}
+.stream-blink-dot {
+width: 5px;
+height: 5px;
+border-radius: 50%;
+background: var(--state-safe);
+box-shadow: 0 0 6px var(--state-safe);
+animation: alertPulse 1.5s infinite;
+}
+.log-stream {
+display: flex;
+flex-direction: column;
+gap: 6px;
+flex: 1;
+min-height: 0;
+overflow-y: auto;
+padding-right: 4px;
+}
+.log-stream::-webkit-scrollbar {
+width: 4px;
+}
+.log-stream::-webkit-scrollbar-thumb {
+background: rgba(56, 189, 248, 0.25);
+border-radius: 2px;
+}
+.log-stream::-webkit-scrollbar-thumb:hover {
+background: rgba(56, 189, 248, 0.45);
+}
+.log-entry {
+display: flex;
+gap: 8px;
+font-family: 'JetBrains Mono', monospace;
+font-size: 0.70rem;
+line-height: 1.45;
+padding: 2px 0;
+border-left: 2px solid transparent;
+padding-left: 6px;
+transition: background 0.15s ease;
+}
+.log-entry:hover {
+background: rgba(255, 255, 255, 0.03);
+border-left-color: var(--accent-cyan);
+}
+.log-ts {
+color: var(--text-low);
+flex-shrink: 0;
+opacity: 0.85;
+font-weight: 500;
+text-shadow: none;
+}
+.log-text {
+word-break: break-word;
+color: #e2e8f0; /* Crisp off-white */
+text-shadow: none;
+}
+.log-text.success {
+color: #34d399; /* Clean solid emerald */
+text-shadow: none;
+}
+.log-text.warning {
+color: #fbbf24; /* Clean solid amber */
+text-shadow: none;
+}
+.log-text.danger {
+color: #f87171; /* Clean solid red */
+font-weight: 600;
+text-shadow: none;
+}
+</style>
 </head>
-
 <body>
-
-  <div class="app-shell">
-
-    <!-- FLOATING TOP BAR -->
-    <header class="topbar liquid-panel">
-      <div class="brand-meta">
-        <div class="brand-icon-wrap">
-          <div class="live-dot" id="liveDot"></div>
-        </div>
-        <div class="platform-title-group">
-          <div class="platform-title">
-            Autonomous Vehicle Telematics & Hazard HUD
-            <span class="platform-tag">DUAL-SENSOR PIPELINE</span>
-          </div>
-        </div>
-      </div>
-
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <div id="roverNetworkBadge" style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-mid); background: var(--glass-surface-2); padding: 7px 14px; border-radius: 12px; border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s;" title="Click to view or edit ESP32 Rover IP on common network" onclick="promptRoverUrl()">
-          <span id="roverStatusLed" style="width: 8px; height: 8px; border-radius: 50%; background: var(--state-warn); display: inline-block;"></span>
-          <span id="roverUrlText">ROVER: INITIALIZING...</span>
-        </div>
-        <div class="status-badge" id="driverStateBadge">
-          SYSTEM CONNECTING...
-        </div>
-      </div>
-    </header>
-
-    <!-- COCKPIT ARCHITECTURE -->
-    <main class="cockpit-grid">
-
-      <!-- LEFT: DUAL CAMERA MONITORING -->
-      <section class="camera-command-deck">
-        <div class="deck-subhead">
-          <span class="deck-title">Dual Camera Telematics Monitoring</span>
-          <div class="hud-pill" id="fpsBadge">FPS: --</div>
-        </div>
-
-        <div class="dual-camera-grid">
-
-          <!-- CAMERA 1: DRIVER MONITOR -->
-          <div class="camera-card driver-view">
-            <div class="camera-header">
-              <div class="camera-title-badge">
-                <span class="hud-status-led"
-                  style="background: var(--brand-cyan); box-shadow: 0 0 8px var(--brand-cyan);"></span>
-                DRIVER MONITOR
-              </div>
-              <span class="hud-pill">CAM 01 // INTERIOR</span>
-            </div>
-            <div class="viewport-window">
-              <img class="cam-feed-crop" src="/video_feed" alt="Driver Feed Offline">
-              <div class="hud-overlay-tag">
-                <span class="hud-status-led"></span>
-                <span>FACIAL LANDMARKS ACTIVE</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- CAMERA 2: ROAD MONITOR -->
-          <div class="camera-card road-view">
-            <div class="camera-header">
-              <div class="camera-title-badge">
-                <span class="hud-status-led"
-                  style="background: var(--brand-violet); box-shadow: 0 0 8px var(--brand-violet);"></span>
-                ROAD MONITOR
-              </div>
-              <span class="hud-pill">CAM 02 // EXTERIOR</span>
-            </div>
-            <div class="viewport-window">
-              <img class="cam-feed-crop" src="/video_feed" alt="Road Feed Offline">
-              <div class="hud-overlay-tag">
-                <span class="hud-status-led"
-                  style="background: var(--brand-violet); box-shadow: 0 0 8px var(--brand-violet);"></span>
-                <span>POTHOLE SENSING ACTIVE</span>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Hidden anchor maintaining backward-compatibility with existing selectors if queried -->
-        <div class="legacy-stream-anchor">
-          <img class="video-stream" src="/video_feed" alt="Stream Anchor">
-        </div>
-      </section>
-
-      <!-- RIGHT: TELEMETRY DECK -->
-      <section class="telemetry-deck">
-        <div class="section-card">
-
-          <!-- FATIGUE INDEX GAUGE -->
-          <div class="gauge-container">
-            <div class="gauge-top">
-              <span class="gauge-title">Fatigue Index</span>
-              <span class="gauge-val" id="fatigueVal">5%</span>
-            </div>
-            <div class="gauge-track">
-              <div class="gauge-fill" id="fatigueBar"></div>
-            </div>
-          </div>
-
-          <!-- TELEMETRY TILES MATRIX -->
-          <div class="telemetry-grid">
-
-            <div class="grid-card">
-              <span class="card-label">Eye State</span>
-              <span class="metric-value" id="eyeStatus">OPEN</span>
-            </div>
-
-            <div class="grid-card">
-              <span class="card-label">Yawn Trigger</span>
-              <span class="metric-value" id="yawnStatus">NO</span>
-            </div>
-
-            <div class="grid-card">
-              <span class="card-label">Road Assessment</span>
-              <span class="metric-value" id="roadCondition">CLEAR</span>
-            </div>
-
-            <div class="grid-card">
-              <span class="card-label">Potholes In-View</span>
-              <span class="metric-value" id="potholeCount">0</span>
-            </div>
-
-            <div class="grid-card">
-              <span class="card-label">Total Potholes Logged</span>
-              <span class="metric-value" id="totalPotholesLogged">0</span>
-            </div>
-
-            <div class="grid-card">
-              <span class="card-label">Blink Frequency</span>
-              <span class="metric-value" id="blinkCount">0</span>
-            </div>
-
-            <div class="grid-card">
-              <span class="card-label">Critical Alarms</span>
-              <span class="metric-value" id="alarmCount">0</span>
-            </div>
-
-            <div class="grid-card">
-              <span class="card-label">Alcohol Sensor</span>
-              <span class="metric-value safe" id="alcoholStatus">CLEARED</span>
-            </div>
-
-          </div>
-
-          <!-- SYSTEM CONTROLS -->
-          <div class="controls-deck">
-            <button class="system-btn btn-halt" onclick="triggerHalt()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10" />
-                <rect x="9" y="9" width="6" height="6" />
-              </svg>
-              Emergency Halt
-            </button>
-
-            <button class="system-btn btn-arm" onclick="triggerArm()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-              </svg>
-              Arm / Restore
-            </button>
-          </div>
-
-          <!-- LIVE JOURNAL CONSOLE -->
-          <div class="log-terminal">
-            <div class="terminal-header">
-              <span>Telemetry Journal</span>
-              <span>LIVE FEED</span>
-            </div>
-
-            <div class="log-stream" id="logsList">
-              <div class="log-entry">
-                <span class="log-ts">[00:00:00]</span>
-                <span class="log-text success">System connecting to telemetry engine...</span>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-    </main>
-
-  </div>
-
-  <script>
-    let currentRoverUrl = "http://esp32-rover.local";
-
-    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProto}//${window.location.host}/ws`;
-    let ws;
-
-    async function fetchNetworkInfo() {
-      try {
-        const res = await fetch('/api/network_info');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.esp32_host_url) currentRoverUrl = data.esp32_host_url;
-          updateRoverBadge(data.esp32_connected, currentRoverUrl);
-        }
-      } catch(e) {}
-    }
-
-    function updateRoverBadge(connected, url) {
-      const el = document.getElementById('roverUrlText');
-      const led = document.getElementById('roverStatusLed');
-      if (el) el.innerText = 'ROVER: ' + url.replace(/^https?:\/\//, '');
-      if (led) {
-        led.style.background = connected ? 'var(--state-safe)' : 'var(--state-warn)';
-        led.style.boxShadow = connected ? '0 0 10px var(--state-safe-glow)' : 'none';
-      }
-    }
-
-    async function promptRoverUrl() {
-      const input = prompt("ESP32 Rover URL on Common Wi-Fi (e.g. http://esp32-rover.local or your Rover's LAN IP):", currentRoverUrl);
-      if (input && input.trim() !== "") {
-        try {
-          const res = await fetch('/api/set_esp32_url', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: input.trim() })
-          });
-          if (res.ok) {
-            const d = await res.json();
-            currentRoverUrl = d.esp32_host_url;
-            updateRoverBadge(true, currentRoverUrl);
-          }
-        } catch(e) {}
-      }
-    }
-
-    fetchNetworkInfo();
-
-    /* =========================================================
-       CONTROL ACTIONS (RESTORE / HALT) - COMMON NETWORK SAFE
-       ========================================================= */
-
-    function triggerArm() {
-      fetch('/arm', { method: 'POST' }).catch(() => {
-        fetch('/restore').catch(() => { });
-      });
-
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ action: "arm" }));
-      }
-
-      if (currentRoverUrl) {
-        fetch(`${currentRoverUrl}/cmd?val=ARM`, { mode: 'no-cors' }).catch(() => { });
-      }
-    }
-
-    function triggerHalt() {
-      fetch('/halt', { method: 'POST' }).catch(() => { });
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ action: "halt" }));
-      }
-      if (currentRoverUrl) {
-        fetch(`${currentRoverUrl}/cmd?val=STOP`, { mode: 'no-cors' }).catch(() => { });
-      }
-    }
-
-    /* =========================================================
-       WEBSOCKET TELEMETRY PIPELINE - UNCHANGED
-       ========================================================= */
-
-    function initWebSocket() {
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        const dot = document.getElementById('liveDot');
-        if (dot) {
-          dot.style.background = 'var(--state-safe)';
-          dot.style.boxShadow = '0 0 14px var(--state-safe-glow)';
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          const t = data.telemetry;
-
-          if (t.esp32_url) currentRoverUrl = t.esp32_url;
-          if (t.esp32_connected !== undefined) {
-            updateRoverBadge(t.esp32_connected, currentRoverUrl);
-          }
-
-          // FPS
-          const fpsBadge = document.getElementById('fpsBadge');
-          if (fpsBadge) fpsBadge.innerText = `FPS: ${t.fps}`;
-
-          // Eye Status
-          const eyeElem = document.getElementById('eyeStatus');
-          if (eyeElem) {
-            eyeElem.innerText = t.eye_status;
-            eyeElem.className = 'metric-value ' + (t.eye_status === 'CLOSED' ? 'crit' : 'safe');
-          }
-
-          // Yawn Status
-          const yawnElem = document.getElementById('yawnStatus');
-          if (yawnElem) {
-            yawnElem.innerText = t.yawning;
-            yawnElem.className = 'metric-value ' + (t.yawning === 'YES' ? 'warn' : '');
-          }
-
-          // Road Status
-          const roadElem = document.getElementById('roadCondition');
-          if (roadElem) {
-            roadElem.innerText = t.road_condition;
-            roadElem.className = 'metric-value ' + (t.pothole_detected ? 'warn' : 'safe');
-          }
-
-          // Potholes Counters
-          const potholeElem = document.getElementById('potholeCount');
-          if (potholeElem) {
-            potholeElem.innerText = t.pothole_count;
-            potholeElem.className = 'metric-value ' + (t.pothole_count > 0 ? 'warn' : '');
-          }
-
-          const totalPotholesElem = document.getElementById('totalPotholesLogged');
-          if (totalPotholesElem) totalPotholesElem.innerText = t.total_potholes_logged || 0;
-
-          // Blink Count & Alarms
-          const blinkElem = document.getElementById('blinkCount');
-          if (blinkElem) blinkElem.innerText = t.eye_blinks;
-
-          const alarmElem = document.getElementById('alarmCount');
-          if (alarmElem) alarmElem.innerText = t.alarms_triggered;
-
-          // Alcohol Sensor
-          const alcElem = document.getElementById('alcoholStatus');
-          if (alcElem) {
-            if (t.alcohol_detected) {
-              alcElem.innerText = `LOCKED (${t.alcohol_level})`;
-              alcElem.className = 'metric-value crit';
-            } else {
-              alcElem.innerText = 'CLEARED';
-              alcElem.className = 'metric-value safe';
-            }
-          }
-
-          // Fatigue Gauge
-          const fatigue = t.drowsiness_level;
-          const bar = document.getElementById('fatigueBar');
-          const fatigueVal = document.getElementById('fatigueVal');
-
-          if (fatigueVal) fatigueVal.innerText = `${fatigue}%`;
-          if (bar) {
-            bar.style.width = `${fatigue}%`;
-
-            if (fatigue >= 80) {
-              bar.style.background = 'linear-gradient(90deg, #e11d48, var(--state-danger))';
-              bar.style.boxShadow = '0 0 16px var(--state-danger-glow)';
-              if (fatigueVal) fatigueVal.style.color = 'var(--state-danger)';
-            } else if (fatigue >= 40) {
-              bar.style.background = 'linear-gradient(90deg, #d97706, var(--state-warn))';
-              bar.style.boxShadow = '0 0 16px var(--state-warn-glow)';
-              if (fatigueVal) fatigueVal.style.color = 'var(--state-warn)';
-            } else {
-              bar.style.background = 'linear-gradient(90deg, #059669, var(--state-safe))';
-              bar.style.boxShadow = '0 0 14px var(--state-safe-glow)';
-              if (fatigueVal) fatigueVal.style.color = 'var(--text-high)';
-            }
-          }
-
-          // Top Status Badge
-          const badge = document.getElementById('driverStateBadge');
-          if (badge) {
-            badge.innerText = t.driver_condition;
-
-            if (t.driver_condition.includes('CRITICAL') || t.driver_condition.includes('HALT') || t.driver_condition.includes('LOCKED')) {
-              badge.className = 'status-badge critical';
-            } else if (t.driver_condition.includes('WARNING') || t.driver_condition.includes('PARKED')) {
-              badge.className = 'status-badge warning';
-            } else {
-              badge.className = 'status-badge';
-            }
-          }
-
-          // Journal Log Stream
-          if (data.logs) {
-            const list = document.getElementById('logsList');
-            if (list) {
-              list.innerHTML = data.logs.map(l =>
-                `<div class="log-entry">
-                  <span class="log-ts">[${l.time}]</span>
-                  <span class="log-text ${l.type}">${l.msg}</span>
-                </div>`
-              ).join('');
-            }
-          }
-
-        } catch (e) {
-          console.error("Telemetry update error:", e);
-        }
-      };
-
-      ws.onerror = () => {
-        const dot = document.getElementById('liveDot');
-        if (dot) {
-          dot.style.background = 'var(--state-danger)';
-          dot.style.boxShadow = '0 0 14px var(--state-danger-glow)';
-        }
-      };
-
-      ws.onclose = () => {
-        const dot = document.getElementById('liveDot');
-        if (dot) {
-          dot.style.background = 'var(--state-warn)';
-          dot.style.boxShadow = '0 0 14px var(--state-warn-glow)';
-        }
-        setTimeout(initWebSocket, 2000);
-      };
-    }
-
-    initWebSocket();
-  </script>
-
+<div class="app-shell">
+<!-- FLOATING TOP BAR -->
+<header class="topbar liquid-panel">
+<div class="brand-meta">
+<div class="brand-icon-wrap">
+<div class="pulse-ring"></div>
+<div class="live-dot" id="liveDot"></div>
+</div>
+<div class="platform-title">
+Autonomous Vehicle Telematics & Hazard HUD
+<span class="platform-tag">DUAL-SENSOR PIPELINE</span>
+</div>
+</div>
+<div class="header-actions">
+<div class="header-stat-group">
+<div class="system-clock-badge" id="hudClockBadge">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<circle cx="12" cy="12" r="10"/>
+<polyline points="12 6 12 12 16 14"/>
+</svg>
+<span id="hudClock">00:00:00 UTC</span>
+</div>
+</div>
+<div class="status-badge" id="driverStateBadge">
+SYSTEM CONNECTING...
+</div>
+</div>
+</header>
+<!-- COCKPIT ARCHITECTURE -->
+<main class="cockpit-grid">
+<!-- =========================================================
+UPPER COCKPIT TIER: DUAL CAMERAS + PILOT COMMAND / FATIGUE
+========================================================= -->
+<div class="upper-deck-grid">
+<!-- LEFT: DUAL CAMERA MONITORING -->
+<section class="camera-command-deck">
+<div class="deck-subhead">
+<span class="deck-title">Dual Camera Telematics Monitoring</span>
+<div class="hud-meta-group">
+<div class="hud-pill">
+<span class="hud-status-led" style="background: var(--accent-cyan);"></span>
+AI INFERENCE: ACTIVE
+</div>
+<div class="hud-pill" id="fpsBadge">FPS: --</div>
+</div>
+</div>
+<div class="dual-camera-grid">
+<!-- CAMERA 1: DRIVER MONITOR -->
+<div class="camera-card driver-view hud-bracket">
+<div class="camera-header">
+<div class="camera-title-badge">
+<span class="hud-status-led"
+style="background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan);"></span>
+DRIVER MONITOR
+</div>
+<span class="hud-pill">CAM 01 // INTERIOR</span>
+</div>
+<div class="viewport-window">
+<div class="viewport-scanline"></div>
+<div class="reticle-crosshair"></div>
+<img class="cam-feed-crop" src="/video_feed" alt="Driver Feed Offline">
+<div class="hud-overlay-tag">
+<span class="hud-status-led"></span>
+<span>FACIAL LANDMARKS ACTIVE</span>
+</div>
+<div class="hud-telemetry-tag-right">
+<span>60Hz IR EYE-MESH</span>
+</div>
+</div>
+</div>
+<!-- CAMERA 2: ROAD MONITOR -->
+<div class="camera-card road-view hud-bracket">
+<div class="camera-header">
+<div class="camera-title-badge">
+<span class="hud-status-led"
+style="background: var(--brand-violet); box-shadow: 0 0 8px var(--brand-violet);"></span>
+ROAD MONITOR
+</div>
+<span class="hud-pill">CAM 02 // EXTERIOR</span>
+</div>
+<div class="viewport-window">
+<div class="viewport-scanline"></div>
+<div class="reticle-crosshair"></div>
+<img class="cam-feed-crop" src="/video_feed" alt="Road Feed Offline">
+<div class="hud-overlay-tag">
+<span class="hud-status-led"
+style="background: var(--brand-violet); box-shadow: 0 0 8px var(--brand-violet);"></span>
+<span>POTHOLE SENSING ACTIVE</span>
+</div>
+<div class="hud-telemetry-tag-right">
+<span>ROAD SPATIAL AI</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Hidden anchor maintaining backward-compatibility with existing selectors if queried -->
+<div class="legacy-stream-anchor">
+<img class="video-stream" src="/video_feed" alt="Stream Anchor">
+</div>
+</section>
+<!-- RIGHT: COMMAND & VITAL GAUGES DECK -->
+<section class="cockpit-side-deck">
+<div class="deck-subhead">
+<span class="deck-title">Vehicle State & Override Core</span>
+<div class="hud-pill">LINK: ESP32 AP</div>
+</div>
+<div class="section-card">
+<!-- FATIGUE INDEX GAUGE -->
+<div class="gauge-container">
+<div class="gauge-top">
+<div class="gauge-title-wrap">
+<span class="gauge-title">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+<circle cx="12" cy="12" r="10" />
+<path d="M12 6v6l4 2" />
+</svg>
+Fatigue Index
+</span>
+<span class="gauge-subtitle">NEURAL DROWSINESS VECTOR</span>
+</div>
+<span class="gauge-val" id="fatigueVal">5%</span>
+</div>
+<div class="gauge-track">
+<div class="gauge-fill" id="fatigueBar"></div>
+</div>
+<div class="gauge-scale-ticks">
+<span>0% NOMINAL</span>
+<span>40% ATTENTION</span>
+<span>80% DANGER</span>
+</div>
+</div>
+<!-- SYSTEM CONTROLS -->
+<div class="controls-deck">
+<button class="system-btn btn-halt" onclick="triggerHalt()">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+<circle cx="12" cy="12" r="10" />
+<rect x="9" y="9" width="6" height="6" />
+</svg>
+Emergency Halt
+</button>
+<button class="system-btn btn-arm" onclick="triggerArm()">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+</svg>
+Arm / Restore
+</button>
+</div>
+<!-- QUICK DIAGNOSTICS TELEMETRY STRIP -->
+<div class="system-vitals-strip">
+<div class="vitals-item">
+<span class="vitals-label">Node Target</span>
+<span class="vitals-value">192.168.4.1</span>
+</div>
+<div class="vitals-item">
+<span class="vitals-label">Protocol</span>
+<span class="vitals-value">WS+REST</span>
+</div>
+<div class="vitals-item">
+<span class="vitals-label">Hazard Shield</span>
+<span class="vitals-value" style="color: var(--state-safe);">ARMED</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- =========================================================
+LOWER COCKPIT TIER: TELEMETRY TILES MATRIX + LIVE JOURNAL
+(PERFECTLY BALANCED SIDE-BY-SIDE GRID - NO BLANK SPACE)
+========================================================= -->
+<div class="lower-deck-grid">
+<!-- LEFT: TELEMETRY TILES MATRIX -->
+<section class="telemetry-matrix-panel">
+<div class="deck-subhead">
+<span class="deck-title">Live Telemetry Channels Matrix</span>
+<div class="hud-pill">8-CHANNEL SENSOR FUSION</div>
+</div>
+<!-- TELEMETRY TILES MATRIX (REARRANGED IN EXACT REQUESTED SEQUENCE) -->
+<div class="telemetry-grid">
+<!-- 1. Eye State -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Eye State</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+<circle cx="12" cy="12" r="3" />
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value safe" id="eyeStatus">OPEN</span>
+</div>
+<span class="card-subtext">PERCLOS METRIC</span>
+</div>
+<!-- 2. Blink Frequency (blinkCount) -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Blink Frequency</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+<path d="M12 9v6"/>
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value" id="blinkCount">0</span>
+</div>
+<span class="card-subtext">TOTAL BLINKS</span>
+</div>
+<!-- 3. Yawn Trigger -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Yawn Trigger</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<circle cx="12" cy="12" r="10" />
+<ellipse cx="12" cy="14" rx="4" ry="5" />
+<path d="M9 9h.01M15 9h.01" />
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value" id="yawnStatus">NO</span>
+</div>
+<span class="card-subtext">MOUTH ASPECT RATIO</span>
+</div>
+<!-- 4. Road Assessment -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Road Assessment</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M4 19L9 4h6l5 15"/>
+<path d="M12 8v3m0 4v2"/>
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value safe" id="roadCondition">CLEAR</span>
+</div>
+<span class="card-subtext">SURFACE ANOMALIES</span>
+</div>
+<!-- 5. Potholes In-View -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Potholes In-View</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M12 9v4m0 4h.01"/>
+<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value" id="potholeCount">0</span>
+</div>
+<span class="card-subtext">ACTIVE FRAME HAZARDS</span>
+</div>
+<!-- 6. Total Potholes Logged -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Total Potholes Logged</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+<circle cx="12" cy="10" r="3" />
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value" id="totalPotholesLogged">0</span>
+</div>
+<span class="card-subtext">HISTORIC SPATIAL DB</span>
+</div>
+<!-- 7. Critical Alarms -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Critical Alarms</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+<path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value" id="alarmCount">0</span>
+</div>
+<span class="card-subtext">TRIP ALERTS FIRED</span>
+</div>
+<!-- 8. Alcohol Sensor -->
+<div class="grid-card">
+<div class="card-header-row">
+<span class="card-label">Alcohol Sensor</span>
+<svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+<path d="M9 12l2 2 4-4"/>
+</svg>
+</div>
+<div class="metric-value-wrap">
+<span class="metric-value safe" id="alcoholStatus">CLEARED</span>
+</div>
+<span class="card-subtext">MQ-3 GAS SENSOR</span>
+</div>
+</div>
+</section>
+<!-- RIGHT: LIVE JOURNAL CONSOLE (SIDE-BY-SIDE WITH TELEMETRY MATRIX) -->
+<section class="journal-panel">
+<div class="deck-subhead">
+<span class="deck-title">Telemetry Journal Console</span>
+<div class="hud-pill">REALTIME EVENT STREAM</div>
+</div>
+<!-- TELEMETRY JOURNAL CONSOLE -->
+<div class="log-terminal">
+<div class="terminal-header">
+<span>Telemetry Journal</span>
+<span class="live-stream-badge">
+<span class="stream-blink-dot"></span>
+LIVE FEED
+</span>
+</div>
+<div class="log-stream" id="logsList">
+<div class="log-entry">
+<span class="log-ts">[00:00:00]</span>
+<span class="log-text success">System connecting to telemetry engine...</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+<script>
+const ESP32_URL = "http://192.168.4.1";
+const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const wsUrl = `${wsProto}//${window.location.host}/ws`;
+let ws;
+/* Live HUD Clock Updater */
+function updateHudClock() {
+const now = new Date();
+const clockElem = document.getElementById('hudClock');
+if (clockElem) {
+clockElem.innerText = now.toTimeString().split(' ')[0] + ' UTC';
+}
+}
+setInterval(updateHudClock, 1000);
+updateHudClock();
+/* =========================================================
+CONTROL ACTIONS (RESTORE / HALT) - UNCHANGED
+========================================================= */
+function triggerArm() {
+fetch('/arm', { method: 'POST' }).catch(() => {
+fetch('/restore').catch(() => { });
+});
+if (ws && ws.readyState === WebSocket.OPEN) {
+ws.send(JSON.stringify({ action: "arm" }));
+}
+fetch(`${ESP32_URL}/cmd?val=ARM`, { mode: 'no-cors' }).catch(() => { });
+}
+function triggerHalt() {
+fetch('/halt', { method: 'POST' }).catch(() => { });
+if (ws && ws.readyState === WebSocket.OPEN) {
+ws.send(JSON.stringify({ action: "halt" }));
+}
+fetch(`${ESP32_URL}/cmd?val=STOP`, { mode: 'no-cors' }).catch(() => { });
+}
+/* =========================================================
+WEBSOCKET TELEMETRY PIPELINE - UNCHANGED
+========================================================= */
+function initWebSocket() {
+ws = new WebSocket(wsUrl);
+ws.onopen = () => {
+const dot = document.getElementById('liveDot');
+if (dot) {
+dot.style.background = 'var(--state-safe)';
+dot.style.boxShadow = '0 0 14px var(--state-safe-glow)';
+}
+};
+ws.onmessage = (event) => {
+try {
+const data = JSON.parse(event.data);
+const t = data.telemetry;
+// FPS
+const fpsBadge = document.getElementById('fpsBadge');
+if (fpsBadge) fpsBadge.innerText = `FPS: ${t.fps}`;
+// Eye Status
+const eyeElem = document.getElementById('eyeStatus');
+if (eyeElem) {
+eyeElem.innerText = t.eye_status;
+eyeElem.className = 'metric-value ' + (t.eye_status === 'CLOSED' ? 'crit' : 'safe');
+}
+// Yawn Status
+const yawnElem = document.getElementById('yawnStatus');
+if (yawnElem) {
+yawnElem.innerText = t.yawning;
+yawnElem.className = 'metric-value ' + (t.yawning === 'YES' ? 'warn' : '');
+}
+// Road Status
+const roadElem = document.getElementById('roadCondition');
+if (roadElem) {
+roadElem.innerText = t.road_condition;
+roadElem.className = 'metric-value ' + (t.pothole_detected ? 'warn' : 'safe');
+}
+// Potholes Counters
+const potholeElem = document.getElementById('potholeCount');
+if (potholeElem) {
+potholeElem.innerText = t.pothole_count;
+potholeElem.className = 'metric-value ' + (t.pothole_count > 0 ? 'warn' : '');
+}
+const totalPotholesElem = document.getElementById('totalPotholesLogged');
+if (totalPotholesElem) totalPotholesElem.innerText = t.total_potholes_logged || 0;
+// Blink Count & Alarms
+const blinkElem = document.getElementById('blinkCount');
+if (blinkElem) blinkElem.innerText = t.eye_blinks;
+const alarmElem = document.getElementById('alarmCount');
+if (alarmElem) alarmElem.innerText = t.alarms_triggered;
+// Alcohol Sensor
+const alcElem = document.getElementById('alcoholStatus');
+if (alcElem) {
+if (t.alcohol_detected) {
+alcElem.innerText = `LOCKED (${t.alcohol_level})`;
+alcElem.className = 'metric-value crit';
+} else {
+alcElem.innerText = 'CLEARED';
+alcElem.className = 'metric-value safe';
+}
+}
+// Fatigue Gauge
+const fatigue = t.drowsiness_level;
+const bar = document.getElementById('fatigueBar');
+const fatigueVal = document.getElementById('fatigueVal');
+if (fatigueVal) fatigueVal.innerText = `${fatigue}%`;
+if (bar) {
+bar.style.width = `${fatigue}%`;
+if (fatigue >= 80) {
+bar.style.background = 'linear-gradient(90deg, #e11d48, var(--state-danger))';
+bar.style.boxShadow = '0 0 16px var(--state-danger-glow)';
+if (fatigueVal) fatigueVal.style.color = 'var(--state-danger)';
+} else if (fatigue >= 40) {
+bar.style.background = 'linear-gradient(90deg, #d97706, var(--state-warn))';
+bar.style.boxShadow = '0 0 16px var(--state-warn-glow)';
+if (fatigueVal) fatigueVal.style.color = 'var(--state-warn)';
+} else {
+bar.style.background = 'linear-gradient(90deg, #059669, var(--state-safe))';
+bar.style.boxShadow = '0 0 14px var(--state-safe-glow)';
+if (fatigueVal) fatigueVal.style.color = 'var(--text-high)';
+}
+}
+// Top Status Badge
+const badge = document.getElementById('driverStateBadge');
+if (badge) {
+badge.innerText = t.driver_condition;
+if (t.driver_condition.includes('CRITICAL') || t.driver_condition.includes('HALT') || t.driver_condition.includes('LOCKED')) {
+badge.className = 'status-badge critical';
+} else if (t.driver_condition.includes('WARNING') || t.driver_condition.includes('PARKED')) {
+badge.className = 'status-badge warning';
+} else {
+badge.className = 'status-badge';
+}
+}
+// Journal Log Stream
+if (data.logs) {
+const list = document.getElementById('logsList');
+if (list) {
+list.innerHTML = data.logs.map(l =>
+`<div class="log-entry">
+<span class="log-ts">[${l.time}]</span>
+<span class="log-text ${l.type}">${l.msg}</span>
+</div>`
+).join('');
+}
+}
+} catch (e) {
+console.error("Telemetry update error:", e);
+}
+};
+ws.onerror = () => {
+const dot = document.getElementById('liveDot');
+if (dot) {
+dot.style.background = 'var(--state-danger)';
+dot.style.boxShadow = '0 0 14px var(--state-danger-glow)';
+}
+};
+ws.onclose = () => {
+const dot = document.getElementById('liveDot');
+if (dot) {
+dot.style.background = 'var(--state-warn)';
+dot.style.boxShadow = '0 0 14px var(--state-warn-glow)';
+}
+setTimeout(initWebSocket, 2000);
+};
+}
+initWebSocket();
+</script>
 </body>
-
 </html>
